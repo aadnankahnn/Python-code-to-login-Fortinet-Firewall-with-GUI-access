@@ -1,0 +1,113 @@
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from docx import Document
+
+
+
+
+
+
+# Set up Chrome WebDriver options
+chrome_options = Options()
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+
+# Ignore SSL certificate errors
+chrome_options.add_argument("--ignore-certificate-errors")
+
+try:
+    # Automatically manage the ChromeDriver
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    # Replace with your FortiGate details
+    fortigate_ip = '192.168.1.221:8443'
+    username = 'adm_tp'
+    password = '2022@@2023'
+
+    # URL for the login page
+    login_url = f'https://{fortigate_ip}/login'
+
+    # Set timeout for page load and connection
+    driver.set_page_load_timeout(300)
+
+    # Navigate to the login page
+    print(f"Navigating to {login_url}")
+    driver.get(login_url)
+    print(f"Current URL after navigating to login page: {driver.current_url}")
+
+    # Wait for the login elements to be present
+    wait = WebDriverWait(driver, 60)
+    username_input = wait.until(EC.presence_of_element_located((By.ID, 'username')))
+    password_input = wait.until(EC.presence_of_element_located((By.ID, 'secretkey')))
+    login_button = wait.until(EC.presence_of_element_located((By.ID, 'login_button')))
+
+    # Input the credentials
+    username_input.send_keys(username)
+    password_input.send_keys(password)
+    login_button.click()
+
+    # Wait for the dashboard to load
+    wait.until(EC.url_contains("dashboard"))
+    print(f"Current URL after clicking login: {driver.current_url}")
+
+    # Check if login was successful
+    if "dashboard" in driver.current_url:
+        print("Login successful!")
+
+        try:
+            # Use the provided XPath to get the uptime
+            uptime_xpath = '//*[@id="ng1-app"]/div/f-system-dashboard/f-dashboard/div[2]/div[2]/ul/li[2]/f-system-information-widget/f-dashboard-widget/div[2]/div[2]/widget-content/div/table/tbody/tr[6]/td[2]/div/span'
+            uptime_element = wait.until(EC.presence_of_element_located((By.XPATH, uptime_xpath)))
+            uptime = uptime_element.text
+            print(f"Firewall Uptime: {uptime}")
+
+            # Update the Word document with the uptime information
+            doc_path = r'C:\Users\adnan\Downloads\Projects\Taranaki Pine\Tickets\Python code\2.Uptime\Taranaki Pine Firewall PMA July 2024.docx'
+            try:
+                doc = Document(doc_path)
+
+                # Locate section 2.1 and update uptime
+                found_section_2_1 = False
+                for para in doc.paragraphs:
+                    if "Hudson Rd Fortinet Firewall & Switches" in para.text:
+                        found_section_2_1 = True
+                    elif found_section_2_1 and "2.1" in para.text:
+                        # Locate the table in section 2.1
+                        for table in doc.tables:
+                            for row in table.rows:
+                                if "Uptime" in row.cells[0].text:
+                                    # Update the uptime value
+                                    row.cells[1].text = uptime
+                                    print(f"Updated Uptime in section 2.1 to: {uptime}")
+                                    found_section_2_1 = False
+                                    break
+                            if not found_section_2_1:
+                                break
+
+                # Save the updated document
+                doc.save(doc_path)
+                print("Document updated successfully!")
+
+            except Exception as e:
+                print(f"An error occurred while accessing or updating the document: {e}")
+
+        except Exception as e:
+            print(f"An error occurred while retrieving uptime: {e}")
+
+    else:
+        print("Login failed. Still on the login page.")
+        print("Page source:")
+        print(driver.page_source)
+
+except Exception as e:
+    print(f"An error occurred: {e}")
+finally:
+    driver.quit()
